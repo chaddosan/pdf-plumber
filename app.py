@@ -20,20 +20,23 @@ class PDFAnalyzer:
     """
     
     def __init__(self):
+        # Reduced tolerance values to avoid merging adjacent columns and improve
+        # table extraction accuracy.  Smaller tolerances help preserve column
+        # boundaries in documents with tight spacing.
         self.table_settings = {
-            'vertical_strategy': 'text',  # Back to text strategy with better settings
+            'vertical_strategy': 'text',
             'horizontal_strategy': 'text',
             'min_words_vertical': 1,
             'min_words_horizontal': 1,
-            'text_tolerance': 8,  # Increased tolerance for better grouping
-            'text_x_tolerance': 8,
-            'text_y_tolerance': 8,
-            'join_tolerance': 8,
-            'join_x_tolerance': 8,
-            'join_y_tolerance': 8,
-            'snap_tolerance': 8,
-            'snap_x_tolerance': 8,
-            'snap_y_tolerance': 8
+            'text_tolerance': 3,
+            'text_x_tolerance': 3,
+            'text_y_tolerance': 3,
+            'join_tolerance': 3,
+            'join_x_tolerance': 3,
+            'join_y_tolerance': 3,
+            'snap_tolerance': 3,
+            'snap_x_tolerance': 3,
+            'snap_y_tolerance': 3
         }
     
     def analyze_pdf(self, pdf_path: str) -> Dict[str, Any]:
@@ -494,64 +497,31 @@ class PDFAnalyzer:
     
     def split_text_into_columns(self, text: str) -> List[str]:
         """
-        Split text into columns based on automotive repair table patterns
+        Split text into columns using a series of regular expressions.  This
+        override extends the patterns to recognise additional operations such as
+        "Refinish Only" and "Remove / Install".  If none of the patterns
+        match, the text is split on runs of three or more spaces; otherwise it
+        is returned as a single column.
         """
-        # Clean the text first
         text = self.clean_text(text)
-        
-        # Pattern 1: Complex supplement line with all details
-        # Example: "S1 7 Frt Bumper Cover Remove / Replace Body INC# 4.0 New 51 11 7 389 903 1 $1,087.47 Yes"
-        pattern1 = r'^(S\d+)\s+(\d+)\s+(.+?)\s+(Remove\s*/\s*Replace|R\s*&\s*[A-Z])\s+(Body|Refinish|Mechanical)\s+([A-Z#]+)\s+(\d+\.?\d*)\s+(New|Existing|Remanufactured)\s+([\d\s]+)\s+(\d+)\s+(\$[\d,]+\.?\d*)\s+(Yes|No)$'
-        match1 = re.match(pattern1, text, re.IGNORECASE)
-        if match1:
-            return [
-                match1.group(1),  # Supplement
-                match1.group(2),  # Line number
-                match1.group(3),  # Description
-                match1.group(4),  # Operation
-                match1.group(5),  # Type
-                match1.group(6),  # Units
-                match1.group(7),  # Rate
-                match1.group(8),  # New/Existing
-                match1.group(9),  # Part number
-                match1.group(10), # Qty
-                match1.group(11), # Price
-                match1.group(12)  # Tax
-            ]
-        
-        # Pattern 2: Simple line with R&I operation
-        # Example: "1 R&I Description 3.8 3.8 Existing"
-        pattern2 = r'^(\d+)\s+(R\s*&\s*[A-Z])\s+(.+?)\s+(\d+\.?\d*)\s+(\d+\.?\d*)\s+(Existing|New)$'
-        match2 = re.match(pattern2, text, re.IGNORECASE)
-        if match2:
-            return [match2.group(1), match2.group(2), match2.group(3), match2.group(4), match2.group(5), match2.group(6)]
-        
-        # Pattern 3: Simple line number + description
-        # Example: "4 R&I Bumper Cover 1.2"
-        pattern3 = r'^(\d+)\s+(R\s*&\s*[A-Z])\s+(.+?)\s+(\d+\.?\d*)$'
-        match3 = re.match(pattern3, text, re.IGNORECASE)
-        if match3:
-            return [match3.group(1), match3.group(2), match3.group(3), match3.group(4)]
-        
-        # Pattern 4: Very simple line number + description
-        # Example: "10 R&I Wheel Opening Mldg Japan Built 0.3"
-        pattern4 = r'^(\d+)\s+(.+?)\s+(\d+\.?\d*)$'
-        match4 = re.match(pattern4, text)
-        if match4:
-            return [match4.group(1), match4.group(2), match4.group(3)]
-        
-        # Pattern 5: Simple line number + description
-        pattern5 = r'^(\d+)\s+(.+)$'
-        match5 = re.match(pattern5, text)
-        if match5:
-            return [match5.group(1), match5.group(2)]
-        
-        # If no pattern matches, try to split by common delimiters
-        # Look for multiple spaces or tabs that might indicate columns
-        if re.search(r'\s{3,}', text):  # 3 or more spaces
-            return [col.strip() for col in re.split(r'\s{3,}', text) if col.strip()]
-        
-        # Single column
+        # Complex supplement line pattern that captures supplement, line no.,
+        # description, operation, type, units, rate, part type, part number,
+        # quantity, price and tax.  Recognises Remove/Replace, Remove/Install,
+        # Refinish Only, and R&I operations.
+        pattern_complex = re.compile(
+            r'^(S\d+)\s+(\d+)\s+(.+?)\s+'
+            r'(Remove\s*/\s*Replace|Remove\s*/\s*Install|Refinish\s+Only|R\s*&\s*[A-Z])\s+'
+            r'(Body|Refinish|Mechanical)\s+([A-Z#]+)\s+(\d+\.?\d*)\s+'
+            r'(New|Existing|Remanufactured)\s+([\d\s]+)\s+(\d+)\s+'
+            r'(\$[\d,]+\.?\d*)\s+(Yes|No)$',
+            re.IGNORECASE
+        )
+        m = pattern_complex.match(text)
+        if m:
+            return [m.group(i) for i in range(1, 13)]
+        # Fallback: split on runs of three or more spaces
+        if re.search(r'\s{3,}', text):
+            return [c.strip() for c in re.split(r'\s{3,}', text) if c.strip()]
         return [text]
     
     def is_end_of_table(self, text: str) -> bool:
@@ -1598,6 +1568,217 @@ class PDFAnalyzer:
             logger.warning(f"Metadata extraction failed: {e}")
         
         return metadata
+
+    # ======================================================================
+    # Override column boundary inference with clustering approach
+    def infer_column_boundaries(self, body_region) -> List[Tuple[float, float]]:
+        """
+        Infer column boundaries by clustering the x‑positions of words appearing
+        in the top portion of the body region.  Adjacent positions closer than
+        20 points are clustered together; gaps larger than 20 points indicate
+        column breaks.  Up to 15 columns are returned to prevent over‑segmentation.
+        """
+        try:
+            words = body_region.extract_words(x_tolerance=2, y_tolerance=2)
+        except Exception:
+            return []
+        if not words:
+            return []
+        height = body_region.height
+        # Consider only the top 30% of the body region as potential header area
+        top_words = [w for w in words if w['top'] < height * 0.3]
+        if not top_words:
+            return []
+        x_positions = sorted({round(w['x0']) for w in top_words})
+        # Cluster positions based on a minimum gap of 20 points between clusters
+        clusters: List[List[int]] = []
+        current_cluster: List[int] = []
+        for x in x_positions:
+            if not current_cluster:
+                current_cluster = [x]
+                continue
+            if x - current_cluster[-1] > 20:
+                clusters.append(current_cluster)
+                current_cluster = [x]
+            else:
+                current_cluster.append(x)
+        if current_cluster:
+            clusters.append(current_cluster)
+        # Construct boundaries between clusters
+        boundaries: List[Tuple[float, float]] = []
+        for i, cluster in enumerate(clusters):
+            left = float(min(cluster))
+            # For all but the last cluster, use the next cluster's leftmost position
+            if i < len(clusters) - 1:
+                next_left = float(min(clusters[i + 1]))
+                boundaries.append((left, next_left))
+            else:
+                boundaries.append((left, body_region.width))
+        # Return at most 15 column boundaries
+        return boundaries[:15]
+
+    # ======================================================================
+    # Override table extraction with row continuation handling
+    def extract_table_by_columns(self, body_region, col_edges: List[Tuple[float, float]]) -> List[List[str]]:
+        """
+        Map words into rows and columns using the inferred column edges.  Uses a
+        smaller vertical tolerance for row grouping and merges continuation rows
+        when the first cell is non‑numeric.  Returns a list of row lists.
+        """
+        from collections import defaultdict
+        try:
+            words = body_region.extract_words(x_tolerance=2, y_tolerance=2)
+        except Exception:
+            return []
+        # Group words by row; use a 5‑point rounding for vertical keys
+        rows: Dict[int, List[str]] = defaultdict(lambda: [""] * len(col_edges))
+        for word in words:
+            row_key = round(word['top'] / 5) * 5
+            col_idx = None
+            for i, (x0, x1) in enumerate(col_edges):
+                if x0 <= word['x0'] < x1:
+                    col_idx = i
+                    break
+            if col_idx is not None:
+                current = rows[row_key][col_idx]
+                if current:
+                    rows[row_key][col_idx] = (current + ' ' + word['text']).strip()
+                else:
+                    rows[row_key][col_idx] = word['text']
+        # Sort the row keys and merge continuation rows
+        sorted_keys = sorted(rows.keys())
+        merged_rows: List[List[str]] = []
+        for key in sorted_keys:
+            row = [re.sub(r'\s+', ' ', c).strip() for c in rows[key]]
+            # If the first cell does not start with a digit or supplement prefix, treat as continuation
+            if merged_rows and (not row[0] or not re.match(r'^(S\d+|\d+)', row[0])):
+                prev = merged_rows[-1]
+                for idx, cell in enumerate(row):
+                    if cell:
+                        prev[idx] = (prev[idx] + ' ' + cell).strip() if prev[idx] else cell
+            else:
+                if any(cell for cell in row):
+                    merged_rows.append(row)
+        return merged_rows
+
+    # ======================================================================
+    # Override cleaning and normalisation of table rows
+    def clean_and_normalize_table_rows(self, raw_rows: List[List[str]]) -> List[List[str]]:
+        """
+        Clean and normalise table rows.  Operations are normalised, currency
+        symbols and commas stripped, and multi‑word operations collapsed.  Rows
+        that contain at least three pieces of content or match common repair
+        patterns are retained.
+        """
+        clean_rows: List[List[str]] = []
+        for row in raw_rows:
+            if not row or not any(c.strip() for c in row):
+                continue
+            new_row: List[str] = []
+            for cell in row:
+                cell = cell.strip()
+                # Normalise operation descriptions
+                if re.search(r'\b(Remove|R&R|R&I|Refinish|Install)\b', cell, re.IGNORECASE):
+                    cell = re.sub(r'\bRefinish\s+Only\b', 'Refinish Only', cell, flags=re.IGNORECASE)
+                    cell = re.sub(r'\bRemove\s*/\s*Install\b', 'Remove/Install', cell, flags=re.IGNORECASE)
+                    cell = re.sub(r'\bRemove\s*/\s*Replace\b', 'Remove/Replace', cell, flags=re.IGNORECASE)
+                # Strip currency symbols and commas
+                if re.search(r'\$[\d,]+\.?\d*', cell):
+                    cell = re.sub(r'[^\d.]', '', cell)
+                cell = re.sub(r'\s+', ' ', cell)
+                new_row.append(cell)
+            # Determine if the row resembles a repair line or has sufficient content
+            is_repair = False
+            if new_row and re.match(r'^(S\d+|\d+)', new_row[0]):
+                is_repair = True
+            row_text = ' '.join(new_row).upper()
+            if re.search(r'R&I|REMOVE|REPLACE|REPAIR|REFINISH|BUMPER|LAMP|FENDER', row_text):
+                is_repair = True
+            if re.search(r'\d{3,6}|BUMPER|COVER|LAMP|FENDER|MOLDING', row_text):
+                is_repair = True
+            if is_repair or len([c for c in new_row if c]) >= 3:
+                clean_rows.append(new_row)
+        return clean_rows
+
+    # ======================================================================
+    # Override group_words_into_lines with configurable tolerance
+    def group_words_into_lines(self, words: List[Dict[str, Any]], tolerance: float = 5) -> List[List[Dict[str, Any]]]:
+        """
+        Group a list of word dictionaries into lines based on their vertical
+        positions.  A configurable tolerance controls how far apart two words can
+        be vertically while still belonging to the same line.  Lower tolerances
+        help prevent merging text from adjacent rows in multi‑column layouts.
+        """
+        if not words:
+            return []
+        # Sort by vertical position then horizontal position
+        sorted_words = sorted(words, key=lambda w: (w['top'], w['x0']))
+        lines: List[List[Dict[str, Any]]] = []
+        current_line: List[Dict[str, Any]] = []
+        last_y: Optional[float] = None
+        for word in sorted_words:
+            if last_y is None or abs(word['top'] - last_y) <= tolerance:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = [word]
+            last_y = word['top']
+        if current_line:
+            lines.append(current_line)
+        return lines
+
+    # ======================================================================
+    # Override extract_text_content to use reduced tolerances and no text flow
+    def extract_text_content(self, page) -> List[Dict[str, Any]]:
+        """
+        Extract text content from a pdfplumber page using reduced x/y tolerances
+        and `use_text_flow=False` to preserve column separation.  Lines are
+        constructed using `group_words_into_lines` with a small tolerance.
+        """
+        text_objects: List[Dict[str, Any]] = []
+        try:
+            words = page.extract_words(
+                x_tolerance=2,
+                y_tolerance=2,
+                keep_blank_chars=False,
+                use_text_flow=False
+            )
+            # Group words into lines with a small vertical tolerance
+            lines = self.group_words_into_lines(words, tolerance=2)
+            for line in lines:
+                line_text = ' '.join(w['text'] for w in line)
+                line_text = self.clean_text(line_text)
+                if line_text.strip():
+                    text_objects.append({
+                        'text': line_text,
+                        'x0': min(w['x0'] for w in line),
+                        'x1': max(w['x1'] for w in line),
+                        'top': min(w['top'] for w in line),
+                        'bottom': max(w['bottom'] for w in line),
+                        'font_size': line[0].get('size', 12) if line else 12,
+                        'words': line
+                    })
+        except Exception:
+            # Fallback: use page.extract_text() with layout preservation
+            try:
+                raw_text = page.extract_text(layout=True)
+            except Exception:
+                raw_text = ''
+            if raw_text:
+                for i, raw_line in enumerate(raw_text.split('\n')):
+                    clean = self.clean_text(raw_line.strip())
+                    if clean:
+                        text_objects.append({
+                            'text': clean,
+                            'x0': 0,
+                            'x1': page.width,
+                            'top': i * 20,
+                            'bottom': (i + 1) * 20,
+                            'font_size': 12,
+                            'words': []
+                        })
+        return text_objects
     
     def extract_line_items_table(self, body_region) -> List[Dict[str, Any]]:
         """
@@ -1944,6 +2125,61 @@ class PDFAnalyzer:
             validation_results['is_valid'] = False
         
         return validation_results
+
+    # ======================================================================
+    # Override metadata extraction with a version that supports multi‑line values
+    def extract_metadata(self, meta_region) -> Dict[str, str]:
+        """
+        Extract metadata (key–value pairs) from the header region.
+        This override supports multi‑line values: if a line does not contain a colon and a key
+        has already been identified, the line will be appended to the current key's value.
+        Additionally, it scans for VINs, claim numbers, policy numbers and other
+        common automotive fields anywhere in each line.
+        """
+        metadata: Dict[str, str] = {}
+        try:
+            text = meta_region.extract_text() or ''
+            current_key: Optional[str] = None
+            for raw_line in text.split('\n'):
+                line = raw_line.strip()
+                if not line:
+                    continue
+                # 1) explicit "Key: Value" format
+                colon_match = re.match(r'^([\w\s/]+?):\s*(.+)$', line)
+                if colon_match:
+                    key, value = colon_match.groups()
+                    current_key = key.strip()
+                    metadata[current_key] = value.strip()
+                    continue
+                # 2) search for known patterns anywhere in the line
+                key_patterns = {
+                    r'VIN\s*[:#]?\s*([A-Z0-9]{17})': 'VIN',
+                    r'Claim\s*(Number|#)[:\s]*([A-Z0-9-]+)': 'Claim Number',
+                    r'Policy\s*(Number|#)[:\s]*([A-Z0-9-]+)': 'Policy Number',
+                    r'Estimate\s*ID\s*[:#]?\s*([A-Z0-9-]+)': 'Estimate ID',
+                    r'Year\s*[:\s]*([0-9]{4})': 'Year',
+                    r'Make\s*[:\s]*([A-Za-z\s]+)': 'Make',
+                    r'Model\s*[:\s]*([A-Za-z0-9\s]+)': 'Model',
+                    r'Mileage\s*[:\s]*([0-9,]+)': 'Mileage',
+                }
+                matched_any = False
+                for pattern, key_name in key_patterns.items():
+                    match = re.search(pattern, line, re.IGNORECASE)
+                    if match:
+                        value = match.group(1 if key_name != 'Claim Number' else 2)
+                        metadata[key_name] = value.strip()
+                        matched_any = True
+                if matched_any:
+                    current_key = None
+                    continue
+                # 3) append to current key if no colon and current_key exists
+                if current_key and ':' not in line:
+                    metadata[current_key] = (metadata[current_key] + ' ' + line).strip()
+                else:
+                    current_key = None
+        except Exception as e:
+            logger.warning(f"Metadata extraction failed: {e}")
+        return metadata
 
 # Initialize the analyzer
 analyzer = PDFAnalyzer()
