@@ -1,0 +1,17 @@
+
+    <!doctype html>
+    <title>Extraction Results</title>
+    <style>body { font-family: sans-serif; max-width: 1200px; margin: auto; padding: 1em; background-color: #f4f4f9; color: #333; } .container { background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); } h1, h2 { color: #005a9c; border-bottom: 2px solid #005a9c; padding-bottom: 0.3em; } pre { background: #e9ecef; padding: 1em; border: 1px solid #dee2e6; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-size: 0.9em; } a { display: inline-block; margin-top: 1.5em; text-decoration: none; background-color: #005a9c; color: white; padding: 10px 20px; border-radius: 4px; } a:hover { background-color: #004a8c; }</style>
+    <div class="container">
+        <h1>Extraction Results for: {{ data.filename }}</h1>
+        <h2>Header Information</h2>
+        <pre>VIN:           {{ data.vin or 'Not found' }}
+Claim #:       {{ data.claim_number or 'Not found' }}
+Policy #:      {{ data.policy_number or 'Not found' }}</pre>
+        <h2>Cost Summary</h2>
+        <pre>{{ data.totals | tojson(indent=4) }}</pre>
+        <h2>Line Items ({{ data.line_items | length }})</h2>
+        <pre>{{ data.line_items | tojson(indent=4) }}</pre>
+        <a href="/">Upload Another File</a>
+    </div>
+    

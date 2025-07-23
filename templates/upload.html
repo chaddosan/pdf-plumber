@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>PDF Analyzer Pro - Advanced Document Processing</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --light-bg: #f8fafc;
+            --dark-bg: #1e293b;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .main-container {
+            min-height: 100vh;
+            padding: 2rem 0;
+        }
+
+        .upload-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .upload-header {
+            background: linear-gradient(135deg, var(--primary-color), #1d4ed8);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .upload-body {
+            padding: 3rem;
+        }
+
+        .drop-zone {
+            border: 3px dashed var(--primary-color);
+            border-radius: 15px;
+            padding: 3rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: var(--light-bg);
+            cursor: pointer;
+        }
+
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: var(--success-color);
+            background: rgba(16, 185, 129, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .drop-zone i {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, var(--primary-color), #1d4ed8);
+            border: none;
+            border-radius: 10px;
+            padding: 0.75rem 2rem;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+        }
+
+        .results-container {
+            display: none;
+            margin-top: 2rem;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .result-header {
+            background: var(--light-bg);
+            padding: 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .result-body {
+            padding: 1.5rem;
+        }
+
+        .section-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: var(--light-bg);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 600;
+            color: var(--dark-bg);
+        }
+
+        .section-body {
+            padding: 1.5rem;
+        }
+
+        .table-responsive {
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .table {
+            margin-bottom: 0;
+        }
+
+        .table th {
+            background: var(--light-bg);
+            border-bottom: 2px solid #e2e8f0;
+            font-weight: 600;
+            color: var(--dark-bg);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 20px;
+        }
+
+        .debug-info {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.875rem;
+        }
+
+        .page-nav {
+            background: var(--light-bg);
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .page-nav .btn {
+            margin-right: 0.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            color: var(--secondary-color);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="container">
+            <!-- Upload Section -->
+            <div class="upload-card">
+                <div class="upload-header">
+                    <h1 class="mb-2">
+                        <i class="fas fa-file-pdf me-3"></i>
+                        PDF Analyzer Pro
+                    </h1>
+                    <p class="mb-0">Advanced document processing using pdfplumber best practices</p>
+                </div>
+                
+                <div class="upload-body">
+                    <div class="drop-zone" id="dropZone">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <h4>Drop your PDF here</h4>
+                        <p class="text-muted">or click to browse files</p>
+                        <input type="file" class="file-input" id="fileInput" accept=".pdf" multiple>
+                        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                            <i class="fas fa-upload me-2"></i>Choose Files
+                        </button>
+                    </div>
+
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <h5>Analyzing PDF...</h5>
+                        <p class="text-muted">This may take a few moments</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-container" id="resultsContainer">
+                <div class="result-card">
+                    <div class="result-header">
+                        <h3 id="documentTitle">
+                            <i class="fas fa-file-alt me-2"></i>
+                            Analysis Results
+                        </h3>
+                    </div>
+                    
+                    <div class="result-body">
+                        <!-- Document Stats -->
+                        <div class="stats-grid" id="statsGrid"></div>
+                        
+                        <!-- Document Summary -->
+                        <div class="section-card" id="summarySection">
+                            <div class="section-header">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Document Summary
+                            </div>
+                            <div class="section-body" id="summaryContent"></div>
+                        </div>
+
+                        <!-- Tables -->
+                        <div class="section-card" id="tablesSection">
+                            <div class="section-header">
+                                <i class="fas fa-table me-2"></i>
+                                Detected Tables
+                            </div>
+                            <div class="section-body" id="tablesContent"></div>
+                        </div>
+
+                        <!-- Page Analysis -->
+                        <div class="section-card" id="pagesSection">
+                            <div class="section-header">
+                                <i class="fas fa-file me-2"></i>
+                                Page-by-Page Analysis
+                            </div>
+                            <div class="section-body" id="pagesContent"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // File upload handling
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const resultsContainer = document.getElementById('resultsContainer');
+
+        // Drag and drop functionality
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.includes('pdf')) {
+                alert('Please select a PDF file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Show loading
+            loading.style.display = 'block';
+            resultsContainer.style.display = 'none';
+
+            // Upload and analyze
+            fetch('/api/analyze', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+                displayResults(data);
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                alert('Error analyzing PDF: ' + error.message);
+            });
+        }
+
+        function displayResults(data) {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+
+            // Update document title
+            document.getElementById('documentTitle').innerHTML = 
+                `<i class="fas fa-file-alt me-2"></i>${data.filename}`;
+
+            // Display stats
+            displayStats(data);
+
+            // Display summary
+            displaySummary(data.summary);
+
+            // Display tables
+            displayTables(data.summary.tables || []);
+
+            // Display pages
+            displayPages(data.pages || []);
+
+            // Show results
+            resultsContainer.style.display = 'block';
+            resultsContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayStats(data) {
+            const statsGrid = document.getElementById('statsGrid');
+            const stats = [
+                { label: 'Pages', value: data.total_pages || 0, icon: 'fas fa-file' },
+                { label: 'Tables Found', value: (data.summary?.tables || []).length, icon: 'fas fa-table' },
+                { label: 'Repair Items', value: (data.summary?.repair_items || []).length, icon: 'fas fa-tools' },
+                { label: 'Content Blocks', value: (data.pages || []).reduce((sum, page) => sum + (page.sections?.length || 0), 0), icon: 'fas fa-layer-group' },
+                { label: 'Vehicle Options', value: (data.summary?.vehicle_options || []).length, icon: 'fas fa-cog' },
+                { label: 'Remarks', value: (data.summary?.remarks_sections || []).length, icon: 'fas fa-comment' }
+            ];
+
+            statsGrid.innerHTML = stats.map(stat => `
+                <div class="stat-card">
+                    <i class="${stat.icon} fa-2x text-primary mb-2"></i>
+                    <div class="stat-number">${stat.value}</div>
+                    <div class="stat-label">${stat.label}</div>
+                </div>
+            `).join('');
+        }
+
+        function displaySummary(summary) {
+            const summaryContent = document.getElementById('summaryContent');
+            let html = '';
+
+            // Document Info
+            if (summary.document_info && Object.keys(summary.document_info).length > 0) {
+                html += '<h5>Document Information</h5>';
+                html += '<div class="table-responsive"><table class="table table-sm">';
+                for (const [key, value] of Object.entries(summary.document_info)) {
+                    if (key !== 'raw_text') {
+                        html += `<tr><td><strong>${key.replace(/_/g, ' ').toUpperCase()}</strong></td><td>${value}</td></tr>`;
+                    }
+                }
+                html += '</table></div>';
+            }
+
+            // Vehicle Info
+            if (summary.vehicle_info && Object.keys(summary.vehicle_info).length > 0) {
+                html += '<h5 class="mt-4">Vehicle Information</h5>';
+                html += '<div class="table-responsive"><table class="table table-sm">';
+                for (const [key, value] of Object.entries(summary.vehicle_info)) {
+                    if (key !== 'raw_text') {
+                        html += `<tr><td><strong>${key.replace(/_/g, ' ').toUpperCase()}</strong></td><td>${value}</td></tr>`;
+                    }
+                }
+                html += '</table></div>';
+            }
+
+            // Vehicle Options
+            if (summary.vehicle_options && summary.vehicle_options.length > 0) {
+                html += '<h5 class="mt-4">Vehicle Options</h5>';
+                html += '<div class="row">';
+                summary.vehicle_options.slice(0, 20).forEach(option => {
+                    html += `<div class="col-md-6"><span class="badge bg-light text-dark me-1 mb-1">${option}</span></div>`;
+                });
+                if (summary.vehicle_options.length > 20) {
+                    html += `<div class="col-12"><small class="text-muted">... and ${summary.vehicle_options.length - 20} more options</small></div>`;
+                }
+                html += '</div>';
+            }
+
+            // Cost Summary
+            if (summary.cost_summary && Object.keys(summary.cost_summary).length > 0) {
+                html += '<h5 class="mt-4">Cost Summary</h5>';
+                html += '<div class="table-responsive"><table class="table table-sm">';
+                for (const [key, value] of Object.entries(summary.cost_summary)) {
+                    if (key !== 'raw_text') {
+                        if (typeof value === 'object') {
+                            html += `<tr><td><strong>${key.replace(/_/g, ' ').toUpperCase()}</strong></td><td>${JSON.stringify(value)}</td></tr>`;
+                        } else {
+                            html += `<tr><td><strong>${key.replace(/_/g, ' ').toUpperCase()}</strong></td><td>${value}</td></tr>`;
+                        }
+                    }
+                }
+                html += '</table></div>';
+            }
+
+            // Footer Metadata
+            if (summary.footer_metadata && Object.keys(summary.footer_metadata).length > 0) {
+                html += '<h5 class="mt-4">Document Metadata</h5>';
+                html += '<div class="table-responsive"><table class="table table-sm">';
+                for (const [key, value] of Object.entries(summary.footer_metadata)) {
+                    if (key !== 'raw_text') {
+                        html += `<tr><td><strong>${key.replace(/_/g, ' ').toUpperCase()}</strong></td><td>${value}</td></tr>`;
+                    }
+                }
+                html += '</table></div>';
+            }
+
+            summaryContent.innerHTML = html || '<p class="text-muted">No summary data available</p>';
+        }
+
+        function displayTables(tables) {
+            const tablesContent = document.getElementById('tablesContent');
+            
+            if (tables.length === 0) {
+                tablesContent.innerHTML = '<p class="text-muted">No tables detected</p>';
+                return;
+            }
+
+            let html = '';
+            tables.forEach((table, index) => {
+                html += `
+                    <div class="mb-4">
+                        <h6>Table ${index + 1} (${table.rows} rows × ${table.columns_count} columns)</h6>
+                        <div class="table-responsive">
+                            ${table.html}
+                        </div>
+                    </div>
+                `;
+            });
+
+            tablesContent.innerHTML = html;
+        }
+
+        function displayPages(pages) {
+            const pagesContent = document.getElementById('pagesContent');
+            
+            if (pages.length === 0) {
+                pagesContent.innerHTML = '<p class="text-muted">No pages analyzed</p>';
+                return;
+            }
+
+            let html = '';
+            pages.forEach((page, pageIndex) => {
+                html += `
+                    <div class="page-section mb-4">
+                        <div class="page-nav">
+                            <h5>Page ${page.page_num}</h5>
+                            <div class="mb-2">
+                                <span class="badge bg-primary me-2">${page.debug_info?.original_chars || 0} chars</span>
+                                <span class="badge bg-success me-2">${page.debug_info?.tables_found || 0} tables</span>
+                                <span class="badge bg-info me-2">${page.debug_info?.sections_found || 0} sections</span>
+                            </div>
+                        </div>
+                `;
+
+                // Display sections
+                if (page.sections && page.sections.length > 0) {
+                    page.sections.forEach((section, sectionIndex) => {
+                        html += `
+                            <div class="section-card mb-3">
+                                <div class="section-header">
+                                    <span class="badge bg-secondary me-2">${section.name}</span>
+                                    <span class="badge bg-warning">${section.type}</span>
+                                </div>
+                                <div class="section-body">
+                        `;
+
+                        const parsedData = section.parsed_data;
+                        if (parsedData && Object.keys(parsedData).length > 0) {
+                            if (parsedData.raw_text) {
+                                html += `<p><strong>Raw Text:</strong></p><pre class="debug-info">${JSON.stringify(parsedData.raw_text, null, 2)}</pre>`;
+                            } else {
+                                html += '<div class="table-responsive"><table class="table table-sm">';
+                                for (const [key, value] of Object.entries(parsedData)) {
+                                    if (typeof value === 'object') {
+                                        html += `<tr><td><strong>${key}</strong></td><td><pre>${JSON.stringify(value, null, 2)}</pre></td></tr>`;
+                                    } else {
+                                        html += `<tr><td><strong>${key}</strong></td><td>${value}</td></tr>`;
+                                    }
+                                }
+                                html += '</table></div>';
+                            }
+                        } else {
+                            html += '<p class="text-muted">No data extracted</p>';
+                        }
+
+                        html += '</div></div>';
+                    });
+                }
+
+                // Display tables
+                if (page.tables && page.tables.length > 0) {
+                    html += '<h6 class="mt-3">PDFPlumber Tables</h6>';
+                    page.tables.forEach((table, tableIndex) => {
+                        html += `
+                            <div class="mb-3">
+                                <h6>Table ${tableIndex + 1}</h6>
+                                <div class="table-responsive">
+                                    ${table.html}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                html += '</div>';
+            });
+
+            pagesContent.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
+    
