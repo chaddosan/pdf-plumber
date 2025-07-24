@@ -20,23 +20,20 @@ class PDFAnalyzer:
     """
     
     def __init__(self):
-        # Use lower tolerances to improve separation of adjacent columns.
-        # Smaller values prevent words from neighbouring columns from being merged
-        # during table extraction and word grouping.
         self.table_settings = {
-            'vertical_strategy': 'text',
+            'vertical_strategy': 'text',  # Back to text strategy with better settings
             'horizontal_strategy': 'text',
             'min_words_vertical': 1,
             'min_words_horizontal': 1,
-            'text_tolerance': 3,
-            'text_x_tolerance': 3,
-            'text_y_tolerance': 3,
-            'join_tolerance': 3,
-            'join_x_tolerance': 3,
-            'join_y_tolerance': 3,
-            'snap_tolerance': 3,
-            'snap_x_tolerance': 3,
-            'snap_y_tolerance': 3,
+            'text_tolerance': 8,  # Increased tolerance for better grouping
+            'text_x_tolerance': 8,
+            'text_y_tolerance': 8,
+            'join_tolerance': 8,
+            'join_x_tolerance': 8,
+            'join_y_tolerance': 8,
+            'snap_tolerance': 8,
+            'snap_x_tolerance': 8,
+            'snap_y_tolerance': 8
         }
     
     def analyze_pdf(self, pdf_path: str) -> Dict[str, Any]:
@@ -82,6 +79,11 @@ class PDFAnalyzer:
         
         # Step 4: Extract the main line-items table with precise column boundaries
         line_items_table = self.extract_line_items_table(body_region)
+        # Fallback: if no line items found in the body region, attempt extraction on
+        # the entire cropped page.  Some PDFs place tables higher or lower on
+        # the page than our segmentation anticipates.
+        if not line_items_table:
+            line_items_table = self.extract_line_items_table(cropped_page)
         
         # Step 5: Extract totals and summary information
         totals = self.extract_totals(footer_region)
@@ -1489,8 +1491,10 @@ class PDFAnalyzer:
         Based on ChatGPT guidelines for optimal PDF processing
         """
         try:
-            # Extract all words with their positions
-            words = page.extract_words(x_tolerance=5, y_tolerance=5)
+            # Extract all words with their positions using smaller tolerances to
+            # avoid merging adjacent text.  Do not use text flow so columns
+            # remain separate.
+            words = page.extract_words(x_tolerance=2, y_tolerance=2, use_text_flow=False)
             
             # Find the start of the main table (look for "Line #" or similar)
             start_y = None
@@ -1506,12 +1510,15 @@ class PDFAnalyzer:
                     end_y = word['top']
                     break
             
-            # If we can't find clear boundaries, use page proportions
+            # If we can't find clear boundaries, use reasonable page proportions
+            # Default metadata region is top 20 % of the page; default footer is
+            # bottom 10 %.  This helps ensure the body region includes more
+            # potential table content.
             if start_y is None:
-                start_y = page.height * 0.3  # Top 30% for metadata
-            
+                start_y = page.height * 0.2
+
             if end_y is None:
-                end_y = page.height * 0.8  # Bottom 20% for footer
+                end_y = page.height * 0.9
             
             # Ensure boundaries are within page limits
             start_y = max(0, min(start_y, page.height))
@@ -1947,193 +1954,6 @@ class PDFAnalyzer:
             validation_results['is_valid'] = False
         
         return validation_results
-
-    # ----------------------------------------------------------------------
-    # The following methods override earlier implementations with improved
-    # heuristics for word grouping, text extraction, column detection and table
-    # parsing.  Defining them here ensures these versions take precedence.
-
-    def group_words_into_lines(self, words: List[Dict[str, Any]], tolerance: float = 3) -> List[List[Dict[str, Any]]]:
-        """
-        Group words into lines based on their vertical positions.
-        A lower tolerance helps keep adjacent rows separate, which is critical
-        for multi‑column tables where text is tightly spaced.
-        """
-        if not words:
-            return []
-        sorted_words = sorted(words, key=lambda w: (w['top'], w['x0']))
-        lines: List[List[Dict[str, Any]]] = []
-        current: List[Dict[str, Any]] = []
-        last_y: Optional[float] = None
-        for word in sorted_words:
-            if last_y is None or abs(word['top'] - last_y) <= tolerance:
-                current.append(word)
-            else:
-                lines.append(current)
-                current = [word]
-            last_y = word['top']
-        if current:
-            lines.append(current)
-        return lines
-
-    def extract_text_content(self, page) -> List[Dict[str, Any]]:
-        """
-        Extract text from a pdfplumber page using reduced x/y tolerances and
-        no text flow.  Words are grouped into lines using the improved
-        group_words_into_lines method.  A fallback to page.extract_text() is
-        provided if word extraction fails.
-        """
-        text_objects: List[Dict[str, Any]] = []
-        try:
-            words = page.extract_words(
-                x_tolerance=2,
-                y_tolerance=2,
-                keep_blank_chars=False,
-                use_text_flow=False,
-            )
-            lines = self.group_words_into_lines(words, tolerance=2)
-            for line in lines:
-                line_text = " ".join(w['text'] for w in line)
-                line_text = self.clean_text(line_text)
-                if line_text.strip():
-                    text_objects.append({
-                        'text': line_text,
-                        'x0': min(w['x0'] for w in line),
-                        'x1': max(w['x1'] for w in line),
-                        'top': min(w['top'] for w in line),
-                        'bottom': max(w['bottom'] for w in line),
-                        'font_size': line[0].get('size', 12) if line else 12,
-                        'words': line
-                    })
-        except Exception:
-            # Fallback to simple text extraction if extract_words() fails
-            raw_text = page.extract_text(layout=True) or ""
-            for i, raw_line in enumerate(raw_text.split("\n")):
-                clean = self.clean_text(raw_line.strip())
-                if clean:
-                    text_objects.append({
-                        'text': clean,
-                        'x0': 0,
-                        'x1': page.width,
-                        'top': i * 20,
-                        'bottom': (i + 1) * 20,
-                        'font_size': 12,
-                        'words': []
-                    })
-        return text_objects
-
-    def infer_column_boundaries(self, body_region) -> List[Tuple[float, float]]:
-        """
-        Infer column boundaries by clustering the x‑positions of words in the
-        top portion of the body region.  Gaps larger than 20 points separate
-        columns.  Limits the number of columns to 15.
-        """
-        try:
-            words = body_region.extract_words(x_tolerance=2, y_tolerance=2)
-        except Exception:
-            return []
-        if not words:
-            return []
-        height = body_region.height
-        top_words = [w for w in words if w['top'] < height * 0.3]
-        if not top_words:
-            return []
-        x_positions = sorted({round(w['x0']) for w in top_words})
-        clusters: List[List[int]] = []
-        current_cluster: List[int] = []
-        for x in x_positions:
-            if not current_cluster or x - current_cluster[-1] > 20:
-                if current_cluster:
-                    clusters.append(current_cluster)
-                current_cluster = [x]
-            else:
-                current_cluster.append(x)
-        if current_cluster:
-            clusters.append(current_cluster)
-        boundaries: List[Tuple[float, float]] = []
-        for i, cluster in enumerate(clusters):
-            left = float(min(cluster))
-            if i < len(clusters) - 1:
-                next_left = float(min(clusters[i + 1]))
-                boundaries.append((left, next_left))
-            else:
-                boundaries.append((left, body_region.width))
-        return boundaries[:15]
-
-    def extract_table_by_columns(self, body_region, col_edges: List[Tuple[float, float]]) -> List[List[str]]:
-        """
-        Extract table data using inferred column edges.  Words are grouped
-        into rows with a small vertical tolerance.  Rows whose first cell
-        does not start with a digit or supplement identifier are merged into
-        the previous row to handle descriptions spanning multiple lines.
-        """
-        from collections import defaultdict
-        try:
-            words = body_region.extract_words(x_tolerance=2, y_tolerance=2)
-        except Exception:
-            return []
-        rows: Dict[int, List[str]] = defaultdict(lambda: [""] * len(col_edges))
-        for word in words:
-            # Round top to nearest 5 points for row grouping
-            row_key = round(word['top'] / 5) * 5
-            col_idx = None
-            for i, (x0, x1) in enumerate(col_edges):
-                if x0 <= word['x0'] < x1:
-                    col_idx = i
-                    break
-            if col_idx is not None:
-                current = rows[row_key][col_idx]
-                rows[row_key][col_idx] = (current + " " + word['text']).strip() if current else word['text']
-        sorted_keys = sorted(rows.keys())
-        merged_rows: List[List[str]] = []
-        for key in sorted_keys:
-            row = [re.sub(r'\s+', " ", c).strip() for c in rows[key]]
-            # Merge into previous row if first cell does not start with digit or S#
-            if merged_rows and (not row[0] or not re.match(r'^(S\d+|\d+)', row[0])):
-                prev = merged_rows[-1]
-                for i, cell in enumerate(row):
-                    if cell:
-                        prev[i] = (prev[i] + " " + cell).strip() if prev[i] else cell
-            else:
-                if any(cell for cell in row):
-                    merged_rows.append(row)
-        return merged_rows
-
-    def clean_and_normalize_table_rows(self, raw_rows: List[List[str]]) -> List[List[str]]:
-        """
-        Normalise table rows: collapse known operations, strip currency symbols,
-        reduce multiple spaces, and retain rows that appear to be repair items
-        or contain at least three populated cells.
-        """
-        cleaned: List[List[str]] = []
-        for row in raw_rows:
-            if not row or not any(c.strip() for c in row):
-                continue
-            new_row: List[str] = []
-            for cell in row:
-                cell = cell.strip()
-                # Normalise operation descriptions
-                if re.search(r'\b(Remove|R&R|R&I|Refinish|Install)\b', cell, re.IGNORECASE):
-                    cell = re.sub(r'\bRefinish\s+Only\b', "Refinish Only", cell, flags=re.IGNORECASE)
-                    cell = re.sub(r'\bRemove\s*/\s*Install\b', "Remove/Install", cell, flags=re.IGNORECASE)
-                    cell = re.sub(r'\bRemove\s*/\s*Replace\b', "Remove/Replace", cell, flags=re.IGNORECASE)
-                # Strip currency symbols and commas
-                if re.search(r'\$[\d,]+\.\d*', cell):
-                    cell = re.sub(r'[^\d.]', "", cell)
-                cell = re.sub(r'\s+', " ", cell)
-                new_row.append(cell)
-            # Determine if row resembles a repair line or has enough content
-            is_repair = False
-            if new_row and re.match(r'^(S\d+|\d+)', new_row[0]):
-                is_repair = True
-            row_text = " ".join(new_row).upper()
-            if re.search(r'R&I|REMOVE|REPLACE|REPAIR|REFINISH|BUMPER|LAMP|FENDER', row_text):
-                is_repair = True
-            if re.search(r'\d{3,6}|BUMPER|COVER|LAMP|FENDER|MOLDING', row_text):
-                is_repair = True
-            if is_repair or len([c for c in new_row if c]) >= 3:
-                cleaned.append(new_row)
-        return cleaned
 
 # Initialize the analyzer
 analyzer = PDFAnalyzer()
